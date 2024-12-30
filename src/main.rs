@@ -8,7 +8,7 @@ use std::process::exit;
 
 fn run_file(path: &String) {
     let file_content = read_to_string(path).expect("Oh no");
-    run(file_content);
+    let _ = run(file_content);
 }
 
 fn run_prompt() {
@@ -21,13 +21,13 @@ fn run_prompt() {
 
         let prompt = prompt.trim();
 
-        run(prompt.to_string());
+        let _ = run(prompt.to_string());
     }
 }
 
-fn run(source: String) -> Result<(), String> {
+fn run(source: String) -> Result<(), ()> {
     let mut scanner = Scanner::new(source);
-    let tokens: Vec<Token> = scanner.scan_tokens()?;
+    let tokens: Vec<Token> = scanner.scan_tokens().map_err(|e| println!("{}", e))?;
 
     for token in tokens {
         println!("{:?}", token);
