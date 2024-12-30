@@ -1,4 +1,5 @@
-use std::fmt;
+use std::fmt::{self, Write};
+use LiteralValue::*;
 use TokenType::*;
 
 pub struct Scanner {
@@ -23,7 +24,7 @@ impl Scanner {
     pub fn scan_tokens(&mut self) -> Result<Vec<Token>, String> {
         let mut errors = Vec::new();
 
-        while self.current >= self.source.len() {
+        while self.is_at_end() {
             self.start = self.current;
             let _ = self.scan_token().map_err(|e| errors.push(e));
         }
@@ -44,6 +45,10 @@ impl Scanner {
         Ok(self.tokens.clone())
     }
 
+    fn is_at_end(&self) -> bool {
+        self.current >= self.source.len()
+    }
+
     fn scan_token(&mut self) -> Result<(), String> {
         let c = self.advance();
 
@@ -58,18 +63,125 @@ impl Scanner {
             '+' => self.add_token_null_literal(Plus),
             ';' => self.add_token_null_literal(Semicolon),
             '*' => self.add_token_null_literal(Star),
-            _ => Err(format!("Oopsie, character not recognised: {}", c)),
+
+            // Operators
+            '=' => {
+                let token = if self.match_char('=') {
+                    EqualEqual
+                } else {
+                    Equal
+                };
+
+                self.add_token_null_literal(token)
+            }
+            '!' => {
+                let token = if self.match_char('=') {
+                    BangEqual
+                } else {
+                    Bang
+                };
+
+                self.add_token_null_literal(token)
+            }
+            '<' => {
+                let token = if self.match_char('=') {
+                    LessEqual
+                } else {
+                    Less
+                };
+
+                self.add_token_null_literal(token)
+            }
+            '>' => {
+                let token = if self.match_char('=') {
+                    GreaterEqual
+                } else {
+                    Greater
+                };
+
+                self.add_token_null_literal(token)
+            }
+            // Comments or Division
+            '/' => {
+                if self.match_char('/') {
+                    loop {
+                        if self.peek() == '\n' || !self.is_at_end() {
+                            break;
+                        }
+                        self.advance();
+                    }
+                }
+                self.add_token_null_literal(Slash)
+            }
+
+            // Whitespace
+            ' ' | '\r' | '\t' => Ok(()),
+            '\n' => {
+                self.line += 1;
+                Ok(())
+            }
+
+            // Literals
+            '"' => self.string_literal(),
+            _ => Err(format!(
+                "Oopsie, character not recognised: {} at line {}",
+                c, self.line
+            )),
         }
     }
 
-    fn advance(&mut self) -> char {
+    fn source_char_at_current(&self) -> char {
         let c = self.source.as_bytes()[self.current];
-        self.current += 1;
         c as char
+    }
+
+    fn advance(&mut self) -> char {
+        let c = self.source_char_at_current();
+        self.current += 1;
+        c
+    }
+
+    fn match_char(&mut self, character: char) -> bool {
+        if self.is_at_end() || self.source_char_at_current() != character {
+            false
+        } else {
+            self.current += 1;
+            true
+        }
     }
 
     fn add_token_null_literal(&mut self, token_type: TokenType) -> Result<(), String> {
         self.add_token(token_type, None);
+        Ok(())
+    }
+
+    fn peek(&self) -> char {
+        if self.is_at_end() {
+            '\0'
+        } else {
+            self.source_char_at_current()
+        }
+    }
+
+    fn string_literal(&mut self) -> Result<(), String> {
+        loop {
+            if self.peek() == '"' || self.is_at_end() {
+                break;
+            }
+            if self.peek() == '\n' {
+                self.line += 1;
+            }
+            self.advance();
+        }
+
+        if self.is_at_end() {
+            return Err(format!("unterminated string lol :/ on line {}", self.line));
+        }
+
+        self.advance();
+        let value_as_str = &self.source[self.start + 1..self.current - 1];
+        let value = StringVal(value_as_str.into());
+        self.add_token(StringLiteral, Some(value));
         Ok(())
     }
 
