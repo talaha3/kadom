@@ -1,4 +1,7 @@
-use crate::lexer::{self, Token, TokenType};
+use crate::{
+    environment::Environment,
+    lexer::{self, Token, TokenType},
+};
 
 fn unwrap_as_f32(literal: Option<lexer::LiteralValue>) -> Result<f32, String> {
     match literal {
@@ -62,7 +65,7 @@ impl LiteralValue {
                 }
             }
             Self::String(str) => {
-                if str.len() == 0 {
+                if str.is_empty() {
                     Self::True
                 } else {
                     Self::False
@@ -96,6 +99,9 @@ pub enum Expr {
         operator: Token,
         right: Box<Expr>,
     },
+    Variable {
+        name: Token,
+    },
 }
 
 impl std::fmt::Display for Expr {
@@ -111,17 +117,20 @@ impl std::fmt::Display for Expr {
             Self::Unary { operator, right } => {
                 write!(f, "({} {})", operator.lexeme, right)
             }
+            Self::Variable { name } => {
+                write!(f, "var {}", name.lexeme)
+            }
         }
     }
 }
 
 impl Expr {
-    pub fn evaluate(&self) -> Result<LiteralValue, String> {
+    pub fn evaluate(&self, environment: &Environment) -> Result<LiteralValue, String> {
         match self {
             Expr::Literal { value } => Ok(value.clone()),
-            Expr::Grouping { expression } => Ok(expression.evaluate()?),
+            Expr::Grouping { expression } => Ok(expression.evaluate(environment)?),
             Expr::Unary { operator, right } => {
-                let evaluate_right = right.evaluate()?;
+                let evaluate_right = right.evaluate(environment)?;
 
                 match (evaluate_right, &operator.token_type) {
                     (LiteralValue::Number(x), TokenType::Minus) => Ok(LiteralValue::Number(-x)),
@@ -137,8 +146,8 @@ impl Expr {
                 operator,
                 right,
             } => {
-                let evaluate_left = left.evaluate()?;
-                let evaluate_right = right.evaluate()?;
+                let evaluate_left = left.evaluate(environment)?;
+                let evaluate_right = right.evaluate(environment)?;
 
                 match (evaluate_left, &operator.token_type, evaluate_right) {
                     (LiteralValue::Number(x), TokenType::Minus, LiteralValue::Number(y)) => {
@@ -196,6 +205,7 @@ impl Expr {
                     )),
                 }
             }
+            Self::Variable { name } => environment.get(&name.lexeme),
         }
     }
 }

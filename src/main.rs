@@ -1,7 +1,9 @@
+mod environment;
 mod expr;
 mod interpreter;
 mod lexer;
 mod parser;
+mod stmt;
 
 use interpreter::*;
 use lexer::*;
@@ -44,9 +46,8 @@ fn run(interpreter: &mut Interpreter, source: String) -> Result<(), String> {
     let mut scanner = Scanner::new(source);
     let tokens: Vec<Token> = scanner.scan_tokens()?;
     let mut parser = Parser::new(tokens);
-    let expr = parser.parse()?;
-    let result = interpreter.interpret(expr)?;
-    println!("{}", result);
+    let statements = parser.parse()?;
+    interpreter.interpret(statements)?;
     Ok(())
 }
 

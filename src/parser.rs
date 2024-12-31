@@ -1,5 +1,6 @@
 use crate::expr::{Expr, Expr::*, LiteralValue};
 use crate::lexer::{Token, TokenType, TokenType::*};
+use crate::stmt::Stmt;
 
 #[derive(Debug)]
 pub struct Parser {
@@ -51,8 +52,71 @@ impl Parser {
         self.tokens[self.current].clone()
     }
 
-    pub fn parse(&mut self) -> Result<Expr, String> {
-        self.expression()
+    pub fn parse(&mut self) -> Result<Vec<Stmt>, String> {
+        let mut statements: Vec<Stmt> = Vec::new();
+        let mut errors: Vec<String> = Vec::new();
+
+        while !self.is_at_end() {
+            match self.declaration() {
+                Ok(statement) => {
+                    statements.push(statement);
+                }
+                Err(msg) => {
+                    self.synchronise();
+                    errors.push(msg);
+                }
+            }
+        }
+
+        if errors.is_empty() {
+            Ok(statements)
+        } else {
+            Err(errors.join("\n"))
+        }
+    }
+
+    fn declaration(&mut self) -> Result<Stmt, String> {
+        if self.match_token(&[Var]) {
+            self.var_declaration()
+        } else {
+            self.statement()
+        }
+    }
+
+    fn var_declaration(&mut self) -> Result<Stmt, String> {
+        let name = self.consume(Identifier, "Expected variable name")?;
+
+        let mut initialiser = Expr::Literal {
+            value: LiteralValue::Nil,
+        };
+
+        if self.match_token(&[Equal]) {
+            initialiser = self.expression()?;
+        }
+
+        self.consume(Semicolon, "Expected \';\' after statement")?;
+        Ok(Stmt::Var { name, initialiser })
+    }
+
+    fn statement(&mut self) -> Result<Stmt, String> {
+        if self.match_token(&[Print]) {
+            self.print_statement()
+        } else {
+            self.expression_statement()
+        }
+    }
+
+    fn print_statement(&mut self) -> Result<Stmt, String> {
+        let expression = self.expression()?;
+        self.consume(Semicolon, "Expected \';\' after statement")?;
+        Ok(Stmt::Print { expression })
+    }
+
+    fn expression_statement(&mut self) -> Result<Stmt, String> {
+        let expression = self.expression()?;
+        println!("{expression}");
+        self.consume(Semicolon, "Expected \';\' after statement")?;
+        Ok(Stmt::Expression { expression })
     }
 
     fn expression(&mut self) -> Result<Expr, String> {
@@ -142,9 +206,13 @@ impl Parser {
     fn primary(&mut self) -> Result<Expr, String> {
         if self.match_token(&[LeftParent]) {
             let expr = self.expression()?;
-            self.consume(RightParent, "Expected \")\" here")?;
+            self.consume(RightParent, "Expected \')\' here")?;
             Ok(Grouping {
                 expression: Box::new(expr),
+            })
+        } else if self.match_token(&[Identifier]) {
+            Ok(Variable {
+                name: self.previous(),
             })
         } else if self.match_token(&[False, True, StringLiteral, Number, Nil]) {
             Ok(Literal {
@@ -166,7 +234,7 @@ impl Parser {
         }
     }
 
-    fn synhronise(&mut self) {
+    fn synchronise(&mut self) {
         self.advance();
 
         while !self.is_at_end() {
