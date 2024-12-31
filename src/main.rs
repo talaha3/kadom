@@ -1,7 +1,9 @@
 mod expr;
 mod lexer;
+mod parser;
 
 use lexer::*;
+use parser::*;
 use std::env::args;
 use std::fs::read_to_string;
 use std::io::{stdin, stdout, Write};
@@ -29,11 +31,10 @@ fn run_prompt() {
 fn run(source: String) -> Result<(), ()> {
     let mut scanner = Scanner::new(source);
     let tokens: Vec<Token> = scanner.scan_tokens().map_err(|e| println!("{}", e))?;
+    let mut parser = Parser::new(tokens);
+    let expr = parser.parse().map_err(|e| println!("{}", e))?;
 
-    for token in tokens {
-        println!("{:?}", token);
-    }
-
+    println!("{}", expr);
     Ok(())
 }
 

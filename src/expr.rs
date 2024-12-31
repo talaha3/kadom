@@ -1,4 +1,20 @@
-use crate::lexer::{Token, TokenType};
+use crate::lexer::{self, Token, TokenType};
+
+fn unwrap_as_f32(literal: Option<lexer::LiteralValue>) -> Result<f32, String> {
+    match literal {
+        Some(lexer::LiteralValue::IntVal(s)) => Ok(s as f32),
+        Some(lexer::LiteralValue::FVal(s)) => Ok(s as f32),
+        _ => Err("Could not unwrap as f32".to_string()),
+    }
+}
+
+fn unwrap_as_string(literal: Option<lexer::LiteralValue>) -> Result<String, String> {
+    match literal {
+        Some(lexer::LiteralValue::StringVal(s)) => Ok(s),
+        Some(lexer::LiteralValue::IdentifierVal(s)) => Ok(s),
+        _ => Err("Could not unwrap as string".to_string()),
+    }
+}
 
 pub enum LiteralValue {
     Number(f32),
@@ -19,6 +35,19 @@ impl std::fmt::Display for LiteralValue {
         };
 
         write!(f, "{}", string_value)
+    }
+}
+
+impl LiteralValue {
+    pub fn from_token(token: Token) -> Result<Self, String> {
+        match token.token_type {
+            TokenType::Number => Ok(Self::Number(unwrap_as_f32(token.literal_option)?)),
+            TokenType::StringLiteral => Ok(Self::String(unwrap_as_string(token.literal_option)?)),
+            TokenType::False => Ok(Self::False),
+            TokenType::True => Ok(Self::True),
+            TokenType::Nil => Ok(Self::Nil),
+            _ => panic!("Could not convert to LiteralValue"),
+        }
     }
 }
 
@@ -54,12 +83,6 @@ impl std::fmt::Display for Expr {
                 write!(f, "({} {})", operator.lexeme, right)
             }
         }
-    }
-}
-
-impl Expr {
-    fn print(&self) {
-        println!("{}", self);
     }
 }
 
