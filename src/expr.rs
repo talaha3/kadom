@@ -16,6 +16,7 @@ fn unwrap_as_string(literal: Option<lexer::LiteralValue>) -> Result<String, Stri
     }
 }
 
+#[derive(Debug, Clone, PartialEq)]
 pub enum LiteralValue {
     Number(f32),
     String(String),
@@ -47,6 +48,34 @@ impl LiteralValue {
             TokenType::True => Ok(Self::True),
             TokenType::Nil => Ok(Self::Nil),
             _ => panic!("Could not convert to LiteralValue"),
+        }
+    }
+
+    fn not(&self) -> Self {
+        match self {
+            Self::False | Self::Nil => Self::True,
+            Self::Number(x) => {
+                if *x == 0 as f32 {
+                    Self::True
+                } else {
+                    Self::False
+                }
+            }
+            Self::String(str) => {
+                if str.len() == 0 {
+                    Self::True
+                } else {
+                    Self::False
+                }
+            }
+            Self::True => Self::False,
+        }
+    }
+
+    fn from_bool(boolean: bool) -> Self {
+        match boolean {
+            true => Self::True,
+            false => Self::False,
         }
     }
 }
@@ -81,6 +110,91 @@ impl std::fmt::Display for Expr {
             Self::Literal { value } => write!(f, "{}", value),
             Self::Unary { operator, right } => {
                 write!(f, "({} {})", operator.lexeme, right)
+            }
+        }
+    }
+}
+
+impl Expr {
+    pub fn evaluate(&self) -> Result<LiteralValue, String> {
+        match self {
+            Expr::Literal { value } => Ok(value.clone()),
+            Expr::Grouping { expression } => Ok(expression.evaluate()?),
+            Expr::Unary { operator, right } => {
+                let evaluate_right = right.evaluate()?;
+
+                match (evaluate_right, &operator.token_type) {
+                    (LiteralValue::Number(x), TokenType::Minus) => Ok(LiteralValue::Number(-x)),
+                    (non_number, TokenType::Minus) => {
+                        Err(format!("Negation not implemented for {:?}", non_number))
+                    }
+                    (any, TokenType::Bang) => Ok(any.not()),
+                    (_, _) => Err("Unreachable".to_string()),
+                }
+            }
+            Expr::Binary {
+                left,
+                operator,
+                right,
+            } => {
+                let evaluate_left = left.evaluate()?;
+                let evaluate_right = right.evaluate()?;
+
+                match (evaluate_left, &operator.token_type, evaluate_right) {
+                    (LiteralValue::Number(x), TokenType::Minus, LiteralValue::Number(y)) => {
+                        Ok(LiteralValue::Number(x - y))
+                    }
+                    (LiteralValue::Number(x), TokenType::Slash, LiteralValue::Number(y)) => {
+                        Ok(LiteralValue::Number(x / y))
+                    }
+                    (LiteralValue::Number(x), TokenType::Star, LiteralValue::Number(y)) => {
+                        Ok(LiteralValue::Number(x * y))
+                    }
+                    (LiteralValue::Number(x), TokenType::Plus, LiteralValue::Number(y)) => {
+                        Ok(LiteralValue::Number(x + y))
+                    }
+                    (LiteralValue::String(str1), TokenType::Plus, LiteralValue::String(str2)) => {
+                        Ok(LiteralValue::String(str1 + str2.as_str()))
+                    }
+                    (LiteralValue::Number(x), TokenType::Greater, LiteralValue::Number(y)) => {
+                        Ok(LiteralValue::from_bool(x > y))
+                    }
+                    (LiteralValue::Number(x), TokenType::GreaterEqual, LiteralValue::Number(y)) => {
+                        Ok(LiteralValue::from_bool(x >= y))
+                    }
+                    (LiteralValue::Number(x), TokenType::Less, LiteralValue::Number(y)) => {
+                        Ok(LiteralValue::from_bool(x < y))
+                    }
+                    (LiteralValue::Number(x), TokenType::LessEqual, LiteralValue::Number(y)) => {
+                        Ok(LiteralValue::from_bool(x <= y))
+                    }
+                    (LiteralValue::String(x), TokenType::Greater, LiteralValue::String(y)) => {
+                        Ok(LiteralValue::from_bool(x > y))
+                    }
+                    (LiteralValue::String(x), TokenType::GreaterEqual, LiteralValue::String(y)) => {
+                        Ok(LiteralValue::from_bool(x >= y))
+                    }
+                    (LiteralValue::String(x), TokenType::Less, LiteralValue::String(y)) => {
+                        Ok(LiteralValue::from_bool(x < y))
+                    }
+                    (LiteralValue::String(x), TokenType::LessEqual, LiteralValue::String(y)) => {
+                        Ok(LiteralValue::from_bool(x <= y))
+                    }
+                    (x, TokenType::EqualEqual, y) => Ok(LiteralValue::from_bool(x == y)),
+                    (x, TokenType::BangEqual, y) => Ok(LiteralValue::from_bool(x != y)),
+
+                    // Error handling
+                    (LiteralValue::String(_), oper, LiteralValue::Number(_)) => {
+                        Err(format!("Mismatched types for {oper:?}: String and Number"))
+                    }
+                    (LiteralValue::Number(_), oper, LiteralValue::String(_)) => {
+                        Err(format!("Mismatched types for {oper:?}: Number and String"))
+                    }
+                    (x, oper, y) => Err(format!(
+                        "{:?} cannot be evaluated for {:?} and {:?}",
+                        oper, x, y
+                    )),
+                }
             }
         }
     }
