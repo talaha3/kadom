@@ -1,3 +1,3 @@
 # kadom
 
-Compiler written in Rust
+WIP: Compiler written in Rust
